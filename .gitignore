@@ -1,13 +1,24 @@
-# Compiled Object files, Static and Dynamic libs (Shared Objects)
-*.o
-*.a
-*.so
-
-# Folders
+# Folders #
+###########
 _obj
 _test
 
-# Architecture specific extensions/prefixes
+# Compiled source #
+###################
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Logs & Temp #
+###############
+*.log
+*.temp
+
+# Architecture specific extensions/prefixes #
+#############################################
 *.[568vq]
 [568vq].out
 
@@ -18,7 +29,5 @@ _cgo_gotypes.go
 _cgo_export.*
 
 _testmain.go
-
-*.exe
 *.test
 *.prof
