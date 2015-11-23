@@ -2,7 +2,7 @@ package ovoclient
 
 import(
 	"bytes"
-	"encoding/base64"
+//	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -11,18 +11,22 @@ import(
 	"net/url"
 	"strings"
 	"time"
+	"github.com/maxzerbini/ovoclient/model"
 )
 
 type Session struct {
 	Client *http.Client
 	Log    bool // Log request and response
 
-	// Optional
-	Userinfo *url.Userinfo
-
 	// Optional defaults - can be overridden in a Request
 	Header *http.Header
 	Params *url.Values
+	// Ovo Node 
+	Node *model.OvoTopologyNode
+}
+
+func NewSession(log bool) *Session {
+	return &Session{Log:log}
 }
 
 // Send constructs and sends an HTTP request.
@@ -125,17 +129,6 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	//
 	// Merge Session and Request options
 	//
-	var userinfo *url.Userinfo
-	if u.User != nil {
-		userinfo = u.User
-	}
-	if s.Userinfo != nil {
-		userinfo = s.Userinfo
-	}
-	// Prefer Request's user credentials
-	if r.Userinfo != nil {
-		userinfo = r.Userinfo
-	}
 	if r.Header != nil {
 		for k, v := range *r.Header {
 			header.Set(k, v[0]) // Is there always guarnateed to be at least one value for a header?
@@ -146,20 +139,11 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	}
 	req.Header = header
 	//
-	// Set HTTP Basic authentication if userinfo is supplied
-	//
-	if userinfo != nil {
-		pwd, _ := userinfo.Password()
-		req.SetBasicAuth(userinfo.Username(), pwd)
-		if u.Scheme != "https" {
-			s.log("WARNING: Using HTTP Basic Auth in cleartext is insecure.")
-		}
-	}
-	//
 	// Execute the HTTP request
 	//
 
 	// Debug log request
+	/*
 	s.log("--------------------------------------------------------------------------------")
 	s.log("REQUEST")
 	s.log("--------------------------------------------------------------------------------")
@@ -173,6 +157,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	} else {
 		s.log(r.Payload)
 	}
+	*/
 	r.timestamp = time.Now()
 	var client *http.Client
 	if s.Client != nil {
@@ -213,6 +198,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	response = &rsp
 
 	// Debug log response
+	/*
 	s.log("--------------------------------------------------------------------------------")
 	s.log("RESPONSE")
 	s.log("--------------------------------------------------------------------------------")
@@ -231,7 +217,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	} else {
 		s.log("Empty response body")
 	}
-
+	*/
 	return
 }
 

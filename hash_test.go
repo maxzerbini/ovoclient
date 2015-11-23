@@ -4,7 +4,7 @@ import(
 	"testing"
 )
 
-func TestConfigurationLoad(t *testing.T) {
+func TestHashCode(t *testing.T) {
 	t.Logf("Test key = %s -> Hash = %d", "test12345", GetPositiveHashCode("test12345",128))
 	t.Logf("Test key = %s -> Hash = %d", "ciaociao", GetPositiveHashCode("ciaociao",128))
 	t.Logf("Test key = %s -> Hash = %d", "asdfghjklòàèé", GetPositiveHashCode("asdfghjklòàèé",128))

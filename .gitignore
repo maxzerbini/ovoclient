@@ -2,6 +2,7 @@
 ###########
 _obj
 _test
+.vscode
 
 # Compiled source #
 ###################

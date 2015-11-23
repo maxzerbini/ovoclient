@@ -43,3 +43,15 @@ type OvoTopologyNode struct {
 type OvoTopology struct {
 	Nodes []*OvoTopologyNode
 }
+
+type OvoResponseTopology struct {
+	Status string
+	Code string
+	Data OvoTopology
+}
+
+type OvoResponseTopologyNode struct {
+	Status string
+	Code string
+	Data OvoTopologyNode
+}
