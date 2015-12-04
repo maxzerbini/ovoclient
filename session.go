@@ -1,8 +1,8 @@
 package ovoclient
 
-import(
+import (
+	"strconv"
 	"bytes"
-//	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -13,20 +13,28 @@ import(
 	"time"
 	"github.com/maxzerbini/ovoclient/model"
 )
+// global log flag
+var LogEnabled  bool // Log request and response
 
+// Http Session
 type Session struct {
 	Client *http.Client
-	Log    bool // Log request and response
-
 	// Optional defaults - can be overridden in a Request
 	Header *http.Header
 	Params *url.Values
 	// Ovo Node 
-	Node *model.OvoTopologyNode
+	node *model.OvoTopologyNode
+	port string
 }
 
-func NewSession(log bool) *Session {
-	return &Session{Log:log}
+// create a new Session
+func NewSession() *Session {
+	return &Session{Client:&http.Client{}}
+}
+
+func (s *Session) SetNode(node *model.OvoTopologyNode){
+	s.node = node
+	s.port = strconv.Itoa(node.Port)
 }
 
 // Send constructs and sends an HTTP request.
@@ -38,8 +46,8 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	//
 	u, err := url.Parse(r.Url)
 	if err != nil {
-		s.log("URL", r.Url)
-		s.log(err)
+		logInfo("URL", r.Url)
+		logInfo(err)
 		return
 	}
 	//
@@ -102,7 +110,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 			var b []byte
 			b, err = json.Marshal(&r.Payload)
 			if err != nil {
-				s.log(err)
+				logInfo(err)
 				return
 			}
 			buf = bytes.NewBuffer(b)
@@ -113,7 +121,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 			req, err = http.NewRequest(r.Method, u.String(), nil)
 		}
 		if err != nil {
-			s.log(err)
+			logInfo(err)
 			return
 		}
 		// Overwrite the content type to json since we're pushing the payload as json
@@ -121,7 +129,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	} else { // no data to encode
 		req, err = http.NewRequest(r.Method, u.String(), nil)
 		if err != nil {
-			s.log(err)
+			logInfo(err)
 			return
 		}
 
@@ -138,26 +146,6 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 		header.Add("Accept", "application/json") // Default, can be overridden with Opts
 	}
 	req.Header = header
-	//
-	// Execute the HTTP request
-	//
-
-	// Debug log request
-	/*
-	s.log("--------------------------------------------------------------------------------")
-	s.log("REQUEST")
-	s.log("--------------------------------------------------------------------------------")
-	s.log("Method:", req.Method)
-	s.log("URL:", req.URL)
-	s.log("Header:", req.Header)
-	s.log("Form:", req.Form)
-	s.log("Payload:")
-	if r.RawPayload && s.Log && buf != nil {
-		s.log(base64.StdEncoding.EncodeToString(buf.Bytes()))
-	} else {
-		s.log(r.Payload)
-	}
-	*/
 	r.timestamp = time.Now()
 	var client *http.Client
 	if s.Client != nil {
@@ -168,7 +156,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		s.log(err)
+		logInfo(err)
 		return
 	}
 	defer resp.Body.Close()
@@ -180,7 +168,7 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	//
 	r.body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		s.log(err)
+		logInfo(err)
 		return
 	}
 	if string(r.body) != "" {
@@ -196,28 +184,6 @@ func (s *Session) Send(r *Request) (response *Response, err error) {
 	}
 	rsp := Response(*r)
 	response = &rsp
-
-	// Debug log response
-	/*
-	s.log("--------------------------------------------------------------------------------")
-	s.log("RESPONSE")
-	s.log("--------------------------------------------------------------------------------")
-	s.log("Status: ", response.status)
-	s.log("Header:")
-	s.log(response.HttpResponse().Header)
-	s.log("Body:")
-
-	if response.body != nil {
-		raw := json.RawMessage{}
-		if json.Unmarshal(response.body, &raw) == nil {
-			s.log(&raw)
-		} else {
-			s.log(response.RawText())
-		}
-	} else {
-		s.log("Empty response body")
-	}
-	*/
 	return
 }
 
@@ -272,8 +238,17 @@ func (s *Session) Delete(url string, p *url.Values, result, errMsg interface{}) 
 // Debug method for logging
 // Centralizing logging in one method
 // avoids spreading conditionals everywhere
-func (s *Session) log(args ...interface{}) {
-	if s.Log {
+func logInfo(args ...interface{}) {
+	if LogEnabled {
 		log.Println(args...)
+	}
+}
+
+// Debug method for logging
+// Centralizing logging in one method
+// avoids spreading conditionals everywhere
+func logInfof(message string, args ...interface{}) {
+	if LogEnabled {
+		log.Printf(message, args...)
 	}
 }

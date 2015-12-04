@@ -1,5 +1,11 @@
 package model
 
+const (
+	MaxNodeNumber = 128
+	Active = "ACTIVE"
+	Inactive= "INACTIVE"
+)
+
 type OvoResponse struct {
 	Status string
 	Code string
@@ -11,7 +17,7 @@ type OvoKVRequest struct {
 	Data []byte
 	Collection string
 	TTL int
-	Hash int
+	Hash int32
 }
 
 type OvoKVUpdateRequest struct {
@@ -19,8 +25,8 @@ type OvoKVUpdateRequest struct {
 	NewKey string
 	Data []byte
 	NewData []byte
-	Hash int
-	NewHash int
+	Hash int32
+	NewHash int32
 }
 
 type OvoKVResponse struct {
@@ -38,6 +44,7 @@ type OvoTopologyNode struct {
 	Host string
 	Port int
 	State string
+	Twins []string
 }
 
 type OvoTopology struct {
@@ -54,4 +61,17 @@ type OvoResponseTopologyNode struct {
 	Status string
 	Code string
 	Data OvoTopologyNode
+}
+
+// Get the active twin nodes
+func (t *OvoTopology) GetTwins(names []string)(nodes []*OvoTopologyNode){
+	nodes = make([]*OvoTopologyNode,0)
+	for _,nd := range t.Nodes {
+		for _,s := range names {
+			if nd.Name == s {
+				nodes = append(nodes, nd)
+			}
+		}
+	}
+	return nodes
 }
