@@ -116,8 +116,11 @@ func (c *Client) getSessionFromHash(hash int32) *Session {
 	return c.clientsHash[hash]
 }
 
-// Put data in raw form into the OVO storage.
-func (c *Client) PutRawData(key string, data []byte, ttl int) (*model.OvoResponse, error) {
+// Put data in raw format into the OVO storage.
+// The parameter key is the string associated to the object.
+// The parameter data is the array of bytes rapresenting the object.
+// The parameter ttl is the time to live of the object expressed in seconds; if it's zero the object will not be removed from the storage.
+func (c *Client) PutRawData(key string, data []byte, ttl int) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
 	mdata := &model.OvoKVRequest{Key: key, Data: data, Hash: hash, TTL: ttl}
@@ -131,23 +134,25 @@ func (c *Client) PutRawData(key string, data []byte, ttl int) (*model.OvoRespons
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
 					if errt == nil {
 						c.checkCluster()
-						return resp, nil
+						return nil
 					}
 				}
 			}
 			c.checkCluster()
-			return nil, err
+			return err
 		}
 	}
-	return resp, nil
+	return nil
 }
 
-func (c *Client) Put(key string, data interface{}, ttl int) (*model.OvoResponse, error) {
+// Put the object in the storage serializing it in JSON.
+// The parameter ttl is the time to live of the object expressed in seconds; if it's zero the object will not be removed from the storage.
+func (c *Client) Put(key string, data interface{}, ttl int) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
 	bdata, err := json.Marshal(data)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	mdata := &model.OvoKVRequest{Key: key, Data: bdata, Hash: hash, TTL: ttl}
 	resp := &model.OvoResponse{}
@@ -160,17 +165,18 @@ func (c *Client) Put(key string, data interface{}, ttl int) (*model.OvoResponse,
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
 					if errt == nil {
 						c.checkCluster()
-						return resp, nil
+						return nil
 					}
 				}
 			}
 			c.checkCluster()
-			return nil, err
+			return err
 		}
 	}
-	return resp, nil
+	return nil
 }
 
+// Get a raw format rapresentation of the object stored in the OVO cluster.
 func (c *Client) GetRawData(key string) ([]byte, error) {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
@@ -178,7 +184,7 @@ func (c *Client) GetRawData(key string) ([]byte, error) {
 	if s != nil {
 		rs, err := s.Get(createGetKeyStorageEndpoint(s.node.Host, s.port, key), nil, resp, nil)
 		if err != nil {
-			// try get data from twins
+			// try get data from the twins
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					rs, err := st.Get(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
@@ -202,37 +208,37 @@ func (c *Client) GetRawData(key string) ([]byte, error) {
 	return nil, errors.New("Node not found.")
 }
 
-func (c *Client) Get(key string, data interface{}) (*model.OvoResponse, error) {
+func (c *Client) Get(key string, data interface{}) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
 	resp := &model.OvoResponse{Data: &model.OvoKVResponse{}}
 	if s != nil {
 		rs, err := s.Get(createGetKeyStorageEndpoint(s.node.Host, s.port, key), nil, resp, nil)
 		if err != nil {
-			// try get data from twins
+			// try get data from the twins
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					rs, err := st.Get(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
 					if err == nil {
 						if rs.status == 200 {
 							err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
-							return resp, err
+							return err
 						}
 					}
 				}
 			}
 			c.checkCluster()
-			return nil, errors.New("Key not found.")
+			return errors.New("Key not found.")
 		}
 		if rs.status == 200 {
 			err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
-			return resp, err
+			return err
 		} else if rs.status == 404 {
-			return nil, errors.New("Key not found.")
+			return errors.New("Key not found.")
 		}
-		return nil, errors.New("Invalid data.")
+		return errors.New("Invalid data.")
 	}
-	return nil, errors.New("Node not found.")
+	return errors.New("Node not found.")
 }
 
 // Give the number of object store in every node (also replicated object are counted) and the "TotalCount".
@@ -277,26 +283,58 @@ func (c *Client) Keys() []string {
 }
 
 // Put data in raw form into the OVO storage.
-func (c *Client) Delete(key string) (*model.OvoResponse, error) {
+func (c *Client) Delete(key string) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
 	resp := &model.OvoResponse{}
 	if s != nil {
 		_, err := s.Delete(createGetKeyStorageEndpoint(s.node.Host, s.port, key), nil, resp, nil)
 		if err != nil {
-			// try delete data calling twins
+			// delete data calling all the twins
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
-					_, errt := st.Delete(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
-					if errt == nil {
-						c.checkCluster()
-						return resp, nil
+					_, _ = st.Delete(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+				}
+			}
+			c.checkCluster()
+			return nil
+		} else {
+			return nil
+		}
+	}
+	return errors.New("Node not found.")
+}
+
+//
+func (c *Client) GetAndRemove(key string, data interface{}) error {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	resp := &model.OvoResponse{Data: &model.OvoKVResponse{}}
+	if s != nil {
+		rs, err := s.Get(createGetAndRemoveEndpoint(s.node.Host, s.port, key), nil, resp, nil)
+		if err != nil {
+			// try get data from the twins
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					rs, err := st.Get(createGetAndRemoveEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					if err == nil {
+						if rs.status == 200 {
+							err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
+							return err
+						}
 					}
 				}
 			}
 			c.checkCluster()
-			return nil, err
+			return errors.New("Key not found.")
 		}
+		if rs.status == 200 {
+			err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
+			return err
+		} else if rs.status == 404 {
+			return errors.New("Key not found.")
+		}
+		return errors.New("Invalid data.")
 	}
-	return resp, nil
+	return errors.New("Node not found.")
 }

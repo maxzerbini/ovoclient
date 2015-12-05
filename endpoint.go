@@ -66,3 +66,15 @@ func createGetAndRemoveEndpoint(host string, port string, key string) string {
 	buffer.WriteString("/getandremove")
 	return buffer.String()
 }
+
+func createUpdateValueIfEqualEndpoint(host string, port string, key string) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("http://")
+	buffer.WriteString(host)
+	buffer.WriteString(":")
+	buffer.WriteString(port)
+	buffer.WriteString("/ovo/keystorage/")
+	buffer.WriteString(key)
+	buffer.WriteString("/updatevalueifequal")
+	return buffer.String()
+}
