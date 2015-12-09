@@ -246,3 +246,30 @@ func TestGetAndRemove(t *testing.T) {
 
 	}
 }
+
+func TestUpdateValueIfEqual(t *testing.T) {
+	var testObj = &BigTestObject{Name: "Massimo", Surname: "Zerbini", BirthDate: time.Now(), Id: 111, LotOfData: make([]byte, BigObjectSize, BigObjectSize)}
+	var testNewObj = &BigTestObject{Name: "Max", Surname: "Zerbini", BirthDate: time.Now(), Id: 112, LotOfData: make([]byte, BigObjectSize, BigObjectSize)}
+	var err = client.Put("bigobjToUpdate", testObj, 0)
+	if err != nil {
+		t.Fail()
+	} else {
+		err := client.UpdateValueIfEqual("bigobjToUpdate", testObj, testNewObj)
+		if err != nil {
+			t.Fail()
+		} else {
+			result := &BigTestObject{}
+			err := client.Get("bigobjToUpdate", result)
+			if err != nil {
+				t.Fail()
+			} else {
+				if result.Id == testObj.Id {
+					t.Fail()
+				} else {
+					t.Logf("Updated ojbect is %v", *result)
+				}
+			}
+		}
+
+	}
+}

@@ -12,6 +12,7 @@ type Node struct {
 
 type Configuration struct {
 	ClusterNodes []Node
+	ClusterCheckPeriod int
 }
 
 func LoadConfiguration(path string) *Configuration {

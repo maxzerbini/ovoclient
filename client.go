@@ -6,10 +6,12 @@ import (
 	"github.com/maxzerbini/ovoclient/model"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const (
 	maxServer = 128
+	minClusterCheckPeriod = 10
 )
 
 // OVO Client can connect to a OVO cluster and operates with OVO server APIs.
@@ -20,13 +22,18 @@ type Client struct {
 	clientsHash map[int32]*Session
 	config      *Configuration
 	mux         *sync.RWMutex
+	tickChan <-chan time.Time
+	doneChan chan bool
 }
 
 // Create a client loading the configuration from the default path.
 func NewClient() *Client {
 	client := &Client{clients: make(map[string]*Session, 0), clientsHash: make(map[int32]*Session, 128), mux: new(sync.RWMutex)}
+	client.tickChan = time.NewTicker(time.Second * minClusterCheckPeriod).C
+	client.doneChan = make(chan bool)
 	// load configuration from default path
 	client.init()
+	go client.check()
 	return client
 }
 
@@ -34,21 +41,28 @@ func NewClient() *Client {
 func NewClientFromConfig(config *Configuration) *Client {
 	client := &Client{clients: make(map[string]*Session, 0), clientsHash: make(map[int32]*Session, 128), mux: new(sync.RWMutex)}
 	client.config = config
+	client.tickChan = time.NewTicker(time.Second * 30).C
+	client.doneChan = make(chan bool)
 	client.init()
+	go client.check()
 	return client
 }
 
 // Create a client reading the configuration file from the config-path.
 func NewClientFromConfigPath(configpath string) *Client {
 	client := &Client{clients: make(map[string]*Session, 0), clientsHash: make(map[int32]*Session, 128), mux: new(sync.RWMutex)}
+	client.tickChan = time.NewTicker(time.Second * 30).C
+	client.doneChan = make(chan bool)
 	// load configuration
 	client.config = LoadConfiguration(configpath)
 	client.init()
+	go client.check()
 	return client
 }
 
 // init the client
 func (c *Client) init() {
+	if c.config.ClusterCheckPeriod < minClusterCheckPeriod { c.config.ClusterCheckPeriod = minClusterCheckPeriod}
 	// get topology
 	for _, node := range c.config.ClusterNodes {
 		s := &Session{}
@@ -116,6 +130,24 @@ func (c *Client) getSessionFromHash(hash int32) *Session {
 	return c.clientsHash[hash]
 }
 
+// Check cluster periodically.
+func (c *Client) check(){
+	for {
+        select {
+        case <- c.tickChan:
+            c.checkCluster()
+        case <- c.doneChan:
+            return
+      }
+    }
+}
+
+// Close the client.
+func (c *Client) Close(){
+	c.doneChan <- true
+	
+}
+
 // Put data in raw format into the OVO storage.
 // The parameter key is the string associated to the object.
 // The parameter data is the array of bytes rapresenting the object.
@@ -128,21 +160,24 @@ func (c *Client) PutRawData(key string, data []byte, ttl int) error {
 	if s != nil {
 		_, err := s.Post(createKeyStorageEndpoint(s.node.Host, s.port), mdata, resp, nil)
 		if err != nil {
+			done := true
 			// try post on twins
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
-					if errt == nil {
-						c.checkCluster()
-						return nil
-					}
+					done = done && (errt ==nil)
 				}
 			}
 			c.checkCluster()
-			return err
+			if done {
+				return nil
+			} else {
+				return err
+			}
 		}
+		return nil
 	}
-	return nil
+	return errors.New("Node not found.")
 }
 
 // Put the object in the storage serializing it in JSON.
@@ -159,21 +194,24 @@ func (c *Client) Put(key string, data interface{}, ttl int) error {
 	if s != nil {
 		_, err := s.Post(createKeyStorageEndpoint(s.node.Host, s.port), mdata, resp, nil)
 		if err != nil {
+			done := true
 			// try post on twins
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
-					if errt == nil {
-						c.checkCluster()
-						return nil
-					}
+					done = done && (errt ==nil)
 				}
 			}
 			c.checkCluster()
-			return err
+			if done {
+				return nil
+			} else {
+				return err
+			}
 		}
+		return nil
 	}
-	return nil
+	return errors.New("Node not found.")
 }
 
 // Get a raw format rapresentation of the object stored in the OVO cluster.
@@ -208,6 +246,7 @@ func (c *Client) GetRawData(key string) ([]byte, error) {
 	return nil, errors.New("Node not found.")
 }
 
+// Retrieve an object previously serialized in JSON.
 func (c *Client) Get(key string, data interface{}) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
@@ -291,13 +330,19 @@ func (c *Client) Delete(key string) error {
 		_, err := s.Delete(createGetKeyStorageEndpoint(s.node.Host, s.port, key), nil, resp, nil)
 		if err != nil {
 			// delete data calling all the twins
+			done := true
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
-					_, _ = st.Delete(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					_, errt := st.Delete(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					done = done && (errt ==nil)
 				}
 			}
 			c.checkCluster()
-			return nil
+			if done {
+				return nil
+			} else {
+				return err
+			}
 		} else {
 			return nil
 		}
@@ -305,7 +350,7 @@ func (c *Client) Delete(key string) error {
 	return errors.New("Node not found.")
 }
 
-//
+// Retrieve an object previously serialized in JSON and remove it from the storage.
 func (c *Client) GetAndRemove(key string, data interface{}) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
@@ -314,19 +359,29 @@ func (c *Client) GetAndRemove(key string, data interface{}) error {
 		rs, err := s.Get(createGetAndRemoveEndpoint(s.node.Host, s.port, key), nil, resp, nil)
 		if err != nil {
 			// try get data from the twins
+			done := true
+			found := true
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
-					rs, err := st.Get(createGetAndRemoveEndpoint(st.node.Host, st.port, key), nil, resp, nil)
-					if err == nil {
+					rs, errt := st.Get(createGetAndRemoveEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					done = done && (errt ==nil)
+					if errt == nil {
 						if rs.status == 200 {
-							err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
-							return err
+							errj := json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
+							found = found && (errj == nil)
 						}
 					}
+					
 				}
 			}
 			c.checkCluster()
-			return errors.New("Key not found.")
+			if done && found {
+				return nil
+			} else if done && !found {
+				return errors.New("Key not found.")
+			} else {
+				return err
+			}
 		}
 		if rs.status == 200 {
 			err = json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
@@ -338,3 +393,54 @@ func (c *Client) GetAndRemove(key string, data interface{}) error {
 	}
 	return errors.New("Node not found.")
 }
+
+// Update an object with the newData if the oldData is equal to the stored data.
+func (c *Client) UpdateValueIfEqual(key string, oldData interface{}, newData interface{}) error {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	bOldData, err := json.Marshal(oldData)
+	if err != nil {
+		return err
+	}
+	bNewData, err := json.Marshal(newData)
+	if err != nil {
+		return err
+	}
+	mdata := &model.OvoKVUpdateRequest{Key: key, Data: bOldData, Hash: hash, NewData:bNewData}
+	resp := &model.OvoResponse{}
+	if s != nil {
+		rs, err := s.Post(createUpdateValueIfEqualEndpoint(s.node.Host, s.port, key), mdata, resp, nil)
+		if err != nil {
+			// try get data from the twins
+			done := true
+			found := true
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					rs, errt := st.Post(createUpdateValueIfEqualEndpoint(st.node.Host, st.port, key), mdata, resp, nil)
+					done = done && (errt == nil)
+					if errt == nil {
+							found = found && (rs.status == 200)
+					}
+				}
+			}
+			c.checkCluster()
+			if done && found {
+				return nil
+			} else if done && !found {
+				return errors.New("Key not found or value not equal.")
+			} else {
+				return err
+			}
+		}
+		if rs.status == 200 {
+			return nil
+		} else if rs.status == 403 {
+			return errors.New("Forbidden operation: old value is not equal to the stored value.")
+		} else if rs.status == 404 {
+			return errors.New("Key not found.")
+		}
+		return errors.New("Invalid data.")
+	}
+	return errors.New("Node not found.")
+}
+

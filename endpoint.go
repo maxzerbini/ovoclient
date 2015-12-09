@@ -78,3 +78,4 @@ func createUpdateValueIfEqualEndpoint(host string, port string, key string) stri
 	buffer.WriteString("/updatevalueifequal")
 	return buffer.String()
 }
+
