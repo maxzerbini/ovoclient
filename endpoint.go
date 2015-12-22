@@ -79,3 +79,23 @@ func createUpdateValueIfEqualEndpoint(host string, port string, key string) stri
 	return buffer.String()
 }
 
+func createCountersEndpoint(host string, port string) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("http://")
+	buffer.WriteString(host)
+	buffer.WriteString(":")
+	buffer.WriteString(port)
+	buffer.WriteString("/ovo/counters")
+	return buffer.String()
+}
+
+func createCounterEndpoint(host string, port string, key string) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("http://")
+	buffer.WriteString(host)
+	buffer.WriteString(":")
+	buffer.WriteString(port)
+	buffer.WriteString("/ovo/counters/")
+	buffer.WriteString(key)
+	return buffer.String()
+}

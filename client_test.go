@@ -197,7 +197,7 @@ func TestKeys(t *testing.T) {
 	if len(keys) == 0 {
 		t.Fail()
 	} else {
-		t.Logf("Keys number = %d", len(keys))
+		t.Logf("Keys number = %d\r\n", len(keys))
 	}
 }
 
@@ -216,7 +216,7 @@ func TestDelete(t *testing.T) {
 			if result != nil && err == nil {
 				t.Fail()
 			} else {
-				t.Log("Object deleted.")
+				t.Log("Object deleted.\r\n")
 			}
 		}
 
@@ -240,7 +240,7 @@ func TestGetAndRemove(t *testing.T) {
 			if result != nil && err == nil {
 				t.Fail()
 			} else {
-				t.Log("Object removed.")
+				t.Log("Object removed.\r\n")
 			}
 		}
 
@@ -266,10 +266,38 @@ func TestUpdateValueIfEqual(t *testing.T) {
 				if result.Id == testObj.Id {
 					t.Fail()
 				} else {
-					t.Logf("Updated ojbect is %v", *result)
+					t.Logf("Updated ojbect is %v\r\n", *result)
 				}
 			}
 		}
 
+	}
+}
+
+func TestIncrement(t *testing.T) {
+
+	var count, err = client.Increment("myCounter", 1, 0)
+	if err != nil {
+		t.Fail()
+	}
+	initVal, err := client.GetCounter("myCounter")
+	if err != nil {
+		t.Fail()
+	} else {
+		t.Logf("The initial value of %s is %d\r\n", "myCounter", count)
+	}
+	for i := 0; i < 10; i++ {
+		count, err = client.Increment("myCounter", 1, 0)
+	}
+	if count < (initVal + 10) {
+		t.Fail()
+	} else {
+		t.Logf("The value of %s is %d\r\n", "myCounter", count)
+	}
+	count, err = client.SetCounter("myCounter", 0, 0)
+	if count > 0 {
+		t.Fail()
+	} else {
+		t.Logf("The value of %s is resetted to %d\r\n", "myCounter", count)
 	}
 }

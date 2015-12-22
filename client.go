@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	maxServer = 128
+	maxServer             = 128
 	minClusterCheckPeriod = 10
 )
 
@@ -22,8 +22,8 @@ type Client struct {
 	clientsHash map[int32]*Session
 	config      *Configuration
 	mux         *sync.RWMutex
-	tickChan <-chan time.Time
-	doneChan chan bool
+	tickChan    <-chan time.Time
+	doneChan    chan bool
 }
 
 // Create a client loading the configuration from the default path.
@@ -62,7 +62,9 @@ func NewClientFromConfigPath(configpath string) *Client {
 
 // init the client
 func (c *Client) init() {
-	if c.config.ClusterCheckPeriod < minClusterCheckPeriod { c.config.ClusterCheckPeriod = minClusterCheckPeriod}
+	if c.config.ClusterCheckPeriod < minClusterCheckPeriod {
+		c.config.ClusterCheckPeriod = minClusterCheckPeriod
+	}
 	// get topology
 	for _, node := range c.config.ClusterNodes {
 		s := &Session{}
@@ -131,21 +133,21 @@ func (c *Client) getSessionFromHash(hash int32) *Session {
 }
 
 // Check cluster periodically.
-func (c *Client) check(){
+func (c *Client) check() {
 	for {
-        select {
-        case <- c.tickChan:
-            c.checkCluster()
-        case <- c.doneChan:
-            return
-      }
-    }
+		select {
+		case <-c.tickChan:
+			c.checkCluster()
+		case <-c.doneChan:
+			return
+		}
+	}
 }
 
 // Close the client.
-func (c *Client) Close(){
+func (c *Client) Close() {
 	c.doneChan <- true
-	
+
 }
 
 // Put data in raw format into the OVO storage.
@@ -165,7 +167,7 @@ func (c *Client) PutRawData(key string, data []byte, ttl int) error {
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
-					done = done && (errt ==nil)
+					done = done && (errt == nil)
 				}
 			}
 			c.checkCluster()
@@ -199,7 +201,7 @@ func (c *Client) Put(key string, data interface{}, ttl int) error {
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					_, errt := st.Post(createKeyStorageEndpoint(st.node.Host, st.port), mdata, resp, nil)
-					done = done && (errt ==nil)
+					done = done && (errt == nil)
 				}
 			}
 			c.checkCluster()
@@ -334,7 +336,7 @@ func (c *Client) Delete(key string) error {
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					_, errt := st.Delete(createGetKeyStorageEndpoint(st.node.Host, st.port, key), nil, resp, nil)
-					done = done && (errt ==nil)
+					done = done && (errt == nil)
 				}
 			}
 			c.checkCluster()
@@ -364,14 +366,14 @@ func (c *Client) GetAndRemove(key string, data interface{}) error {
 			for _, nd := range c.topology.GetTwins(s.node.Twins) {
 				if st, ok := c.clients[nd.Name]; ok {
 					rs, errt := st.Get(createGetAndRemoveEndpoint(st.node.Host, st.port, key), nil, resp, nil)
-					done = done && (errt ==nil)
+					done = done && (errt == nil)
 					if errt == nil {
 						if rs.status == 200 {
 							errj := json.Unmarshal(resp.Data.(*model.OvoKVResponse).Data, data)
 							found = found && (errj == nil)
 						}
 					}
-					
+
 				}
 			}
 			c.checkCluster()
@@ -406,7 +408,7 @@ func (c *Client) UpdateValueIfEqual(key string, oldData interface{}, newData int
 	if err != nil {
 		return err
 	}
-	mdata := &model.OvoKVUpdateRequest{Key: key, Data: bOldData, Hash: hash, NewData:bNewData}
+	mdata := &model.OvoKVUpdateRequest{Key: key, Data: bOldData, Hash: hash, NewData: bNewData}
 	resp := &model.OvoResponse{}
 	if s != nil {
 		rs, err := s.Post(createUpdateValueIfEqualEndpoint(s.node.Host, s.port, key), mdata, resp, nil)
@@ -419,7 +421,7 @@ func (c *Client) UpdateValueIfEqual(key string, oldData interface{}, newData int
 					rs, errt := st.Post(createUpdateValueIfEqualEndpoint(st.node.Host, st.port, key), mdata, resp, nil)
 					done = done && (errt == nil)
 					if errt == nil {
-							found = found && (rs.status == 200)
+						found = found && (rs.status == 200)
 					}
 				}
 			}
@@ -444,3 +446,88 @@ func (c *Client) UpdateValueIfEqual(key string, oldData interface{}, newData int
 	return errors.New("Node not found.")
 }
 
+// Increment (or decrement) the counter.
+func (c *Client) Increment(key string, value int64, ttl int) (int64, error) {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	mdata := &model.OvoCounter{Key: key, Value: value, Hash: hash, TTL: ttl}
+	resp := &model.OvoCounterResponse{}
+	if s != nil {
+		_, err := s.Put(createCountersEndpoint(s.node.Host, s.port), mdata, resp, nil)
+		if err != nil {
+			done := true
+			// try post on twins
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					_, errt := st.Put(createCountersEndpoint(st.node.Host, st.port), mdata, resp, nil)
+					done = done && (errt == nil)
+				}
+			}
+			c.checkCluster()
+			if done {
+				return resp.Data.Value, nil
+			} else {
+				return 0, err
+			}
+		}
+		return resp.Data.Value, nil
+	}
+	return 0, errors.New("Node not found.")
+}
+
+// Set the value of the counter.
+func (c *Client) SetCounter(key string, value int64, ttl int) (int64, error) {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	mdata := &model.OvoCounter{Key: key, Value: value, Hash: hash, TTL: ttl}
+	resp := &model.OvoCounterResponse{}
+	if s != nil {
+		_, err := s.Post(createCountersEndpoint(s.node.Host, s.port), mdata, resp, nil)
+		if err != nil {
+			done := true
+			// try post on twins
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					_, errt := st.Post(createCountersEndpoint(st.node.Host, st.port), mdata, resp, nil)
+					done = done && (errt == nil)
+				}
+			}
+			c.checkCluster()
+			if done {
+				return resp.Data.Value, nil
+			} else {
+				return 0, err
+			}
+		}
+		return resp.Data.Value, nil
+	}
+	return 0, errors.New("Node not found.")
+}
+
+// Get the value of the counter.
+func (c *Client) GetCounter(key string) (int64, error) {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	resp := &model.OvoCounterResponse{}
+	if s != nil {
+		_, err := s.Get(createCounterEndpoint(s.node.Host, s.port, key), nil, resp, nil)
+		if err != nil {
+			done := true
+			// try post on twins
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					_, errt := st.Get(createCounterEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					done = done && (errt == nil)
+				}
+			}
+			c.checkCluster()
+			if done {
+				return resp.Data.Value, nil
+			} else {
+				return 0, err
+			}
+		}
+		return resp.Data.Value, nil
+	}
+	return 0, errors.New("Node not found.")
+}
