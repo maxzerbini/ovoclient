@@ -32,6 +32,7 @@ func NewClient() *Client {
 	client.tickChan = time.NewTicker(time.Second * minClusterCheckPeriod).C
 	client.doneChan = make(chan bool)
 	// load configuration from default path
+	client.config = LoadConfiguration("./config.json")
 	client.init()
 	go client.check()
 	return client

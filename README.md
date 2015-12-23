@@ -20,7 +20,7 @@ The project is completed, all the OVO API calls are implemented.
 	}
 ```
 
-### Put and Get an raw object
+### Put and Get a raw object
 ```Go
 	var client = NewClientFromConfigPath("config.json")
 	var myImage = []byte(`1ab53b1237bf87329fh923...`)
@@ -62,3 +62,23 @@ The project is completed, all the OVO API calls are implemented.
 		printf("The value of %s is resetted to %d\r\n", "myCounter", count)
 	}
 ```
+
+## Client configuration
+
+### Creating the client
+There are three functions that can be used to configure the OVO client:
+- using the default constructor function _NewClient()_ that creates the client reading the configuration file from the default directory "./config.json"
+- using the constructor function _NewClientFromConfigPath(configpath string)_, passing a path and file name of the JSON configuration file
+- using the constructor function _NewClientFromConfig(config *Configuration)_, passing a valid Configuration object in input
+
+### The configuration file
+The config.json file has this format
+```JSON
+{
+	"ClusterNodes":
+	[
+		{"Host":"localhost","Port":"5050"}
+	]
+}
+```
+It can contain a list of one or more OVO node.
