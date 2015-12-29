@@ -283,7 +283,7 @@ func (c *Client) Get(key string, data interface{}) error {
 	return errors.New("Node not found.")
 }
 
-// Give the number of object store in every node (also replicated object are counted) and the "TotalCount".
+// Give the number of object store in every node (also replicated object are counted).
 func (c *Client) Count() map[string]int64 {
 	var count int64
 	counters := make(map[string]int64, len(c.topology.Nodes))
@@ -324,7 +324,7 @@ func (c *Client) Keys() []string {
 	return klist
 }
 
-// Put data in raw form into the OVO storage.
+// Delete an object from the storage.
 func (c *Client) Delete(key string) error {
 	hash := GetPositiveHashCode(key, maxServer)
 	s := c.getSessionFromHash(hash)
@@ -531,4 +531,33 @@ func (c *Client) GetCounter(key string) (int64, error) {
 		return resp.Data.Value, nil
 	}
 	return 0, errors.New("Node not found.")
+}
+
+// Delete a counter.
+func (c *Client) DeleteCounter(key string) error {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	resp := &model.OvoResponse{}
+	if s != nil {
+		_, err := s.Delete(createCounterEndpoint(s.node.Host, s.port, key), nil, resp, nil)
+		if err != nil {
+			// delete data calling all the twins
+			done := true
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					_, errt := st.Delete(createCounterEndpoint(st.node.Host, st.port, key), nil, resp, nil)
+					done = done && (errt == nil)
+				}
+			}
+			c.checkCluster()
+			if done {
+				return nil
+			} else {
+				return err
+			}
+		} else {
+			return nil
+		}
+	}
+	return errors.New("Node not found.")
 }
