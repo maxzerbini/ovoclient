@@ -301,3 +301,32 @@ func TestIncrement(t *testing.T) {
 		t.Logf("The value of %s is resetted to %d\r\n", "myCounter", count)
 	}
 }
+
+func TestDeleteValueIfEqual(t *testing.T) {
+	var testObj = &BigTestObject{Name: "Massimo", Surname: "Zerbini", BirthDate: time.Now(), Id: 111, LotOfData: make([]byte, BigObjectSize, BigObjectSize)}
+	var testNewObj = &BigTestObject{Name: "Max", Surname: "Zerbini", BirthDate: time.Now(), Id: 112, LotOfData: make([]byte, BigObjectSize, BigObjectSize)}
+	var err = client.Put("bigobjToDelete", testObj, 0)
+	if err != nil {
+		t.Fail()
+	} else {
+		err := client.DeleteValueIfEqual("bigobjToDelete", testNewObj)
+		if err == nil {
+			t.Fail()
+		} else {
+			t.Logf("The object %s was not removed \r\n", "bigobjToDelete")
+		}
+		err = client.DeleteValueIfEqual("bigobjToDelete", testObj)
+		if err != nil {
+			t.Fail()
+		} else {
+			result := &BigTestObject{}
+			err := client.Get("bigobjToDelete", result)
+			if err == nil {
+				t.Fail()
+			} else {
+				t.Logf("The object %s was removed \r\n", "bigobjToDelete")
+			}
+		}
+
+	}
+}

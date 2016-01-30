@@ -3,10 +3,11 @@ package ovoclient
 import (
 	"encoding/json"
 	"errors"
-	"github.com/maxzerbini/ovoclient/model"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/maxzerbini/ovoclient/model"
 )
 
 const (
@@ -558,6 +559,50 @@ func (c *Client) DeleteCounter(key string) error {
 		} else {
 			return nil
 		}
+	}
+	return errors.New("Node not found.")
+}
+
+// Delete an object if its value is not changed.
+func (c *Client) DeleteValueIfEqual(key string, oldData interface{}) error {
+	hash := GetPositiveHashCode(key, maxServer)
+	s := c.getSessionFromHash(hash)
+	bOldData, err := json.Marshal(oldData)
+	if err != nil {
+		return err
+	}
+	mdata := &model.OvoKVRequest{Key: key, Data: bOldData, Hash: hash}
+	resp := &model.OvoResponse{}
+	if s != nil {
+		rs, err := s.Post(createDeleteValueIfEqualEndpoint(s.node.Host, s.port, key), mdata, resp, nil)
+		if err != nil {
+			// try get data from the twins
+			done := true
+			found := true
+			for _, nd := range c.topology.GetTwins(s.node.Twins) {
+				if st, ok := c.clients[nd.Name]; ok {
+					rs, errt := st.Post(createDeleteValueIfEqualEndpoint(st.node.Host, st.port, key), mdata, resp, nil)
+					done = done && (errt == nil)
+					if errt == nil {
+						found = found && (rs.status == 200)
+					}
+				}
+			}
+			c.checkCluster()
+			if done && found {
+				return nil
+			} else if done && !found {
+				return errors.New("Key not found or value not equal.")
+			} else {
+				return err
+			}
+		}
+		if rs.status == 200 {
+			return nil
+		} else if rs.status == 403 {
+			return errors.New("Forbidden operation: old value is not equal to the stored value.")
+		}
+		return errors.New("Invalid data.")
 	}
 	return errors.New("Node not found.")
 }

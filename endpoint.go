@@ -99,3 +99,15 @@ func createCounterEndpoint(host string, port string, key string) string {
 	buffer.WriteString(key)
 	return buffer.String()
 }
+
+func createDeleteValueIfEqualEndpoint(host string, port string, key string) string {
+	var buffer bytes.Buffer
+	buffer.WriteString("http://")
+	buffer.WriteString(host)
+	buffer.WriteString(":")
+	buffer.WriteString(port)
+	buffer.WriteString("/ovo/keystorage/")
+	buffer.WriteString(key)
+	buffer.WriteString("/deletevalueifequal")
+	return buffer.String()
+}
