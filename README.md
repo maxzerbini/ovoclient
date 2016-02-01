@@ -1,6 +1,10 @@
 # ovo-client
 OVO Go Client Library
 
+## Latest Build
+[![Build Status](https://drone.io/github.com/maxzerbini/ovoclient/status.png)](https://drone.io/github.com/maxzerbini/ovoclient/latest)
+
+## Project Status
 The project is completed, all the OVO API calls are implemented.
 
 ## Basic usage
