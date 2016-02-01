@@ -1,5 +1,5 @@
 # ovo-client
-OVO Go Client Library
+The OVO Go Client Library.
 
 ## Latest Build
 [![Build Status](https://drone.io/github.com/maxzerbini/ovoclient/status.png)](https://drone.io/github.com/maxzerbini/ovoclient/latest)
