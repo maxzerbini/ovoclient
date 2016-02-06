@@ -88,4 +88,4 @@ The config.json file has this format
 It can contain a list of one or more OVO node.
 
 ## Acknowledgments
-I am indebted to Jason McVetta and his useful REST and HTTP client Napping(https://github.com/jmcvetta/napping).
+I am indebted to Jason McVetta and his useful REST and HTTP client [Napping](https://github.com/jmcvetta/napping).
